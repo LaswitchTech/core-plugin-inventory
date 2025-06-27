@@ -12,234 +12,77 @@ use \LaswitchTech\Core\Abstracts\Model;
 
 class InventoryModel extends Model {
 
+    // Global Properties
+    private $Auth;
+
+    // Properties
+    private $table = 'inventories';
+    private $primary = 'id';
+    private $schema;
+    private $definition;
+    private $definitions = [];
+
     /**
-     * Retrieve Inventory
-     *
-     * @param int $organization
-     * @return array
+     * Constructor
      */
-    public function list(int $organization): array
+    public function __construct()
     {
-        // Create the Query
-        $Query = $this->Database->query()
-            ->table('inventory')
-            ->select('*')
-            ->join('owner', 'users', 'username')
-            ->join('assignedTo', 'users', 'id')
-            ->join('vcard', 'vcards', 'id')
-            ->join('task', 'tasks', 'id')
-            ->join('client', 'clients', 'id')
-            ->join('organization', 'organizations', 'id')
-            ->order('vcard.name', 'ASC')
-            ->filter()
-            ->where('organization', $organization)
-            ->where('isArchived', 0)
-            ->where('id', 9999, '<>');
+        // Import Global Variables
+        global $AUTH;
 
-        // Retrieve the Results
-        $result = $Query->result();
+        // Configure the Global Properties
+        $this->Auth = $AUTH;
 
-        // Decode JSON Fields
-        foreach($result as $key => $record){
-            $result[$key]['task']['process'] = json_decode($record['task']['process'] ?? '[]', true);
-            $result[$key]['vcard']['tags'] = json_decode($record['vcard']['tags'] ?? '[]', true);
-            $result[$key]['vcard']['industries'] = json_decode($record['vcard']['industries'] ?? '[]', true);
+        // Call the parent constructor
+        parent::__construct();
+
+        // Create the Schema
+        $this->schema = $this->Database->schema()->define($this->table);
+
+        // Describe the table
+        foreach($this->schema->describe() as $column){
+            $this->definition[$column['Field']] = $column;
         }
-
-        // Return the Results
-        return $result;
     }
 
     /**
-     * Retrieve Lead's Details
-     *
-     * @param int $id
-     * @return array
-     */
-    public function get(int $id): array
-    {
-        // Create the Query
-        $Query = $this->Database->query()
-            ->table('inventory')
-            ->select('*')
-            ->join('owner', 'users', 'username')
-            ->join('assignedTo', 'users', 'id')
-            ->join('vcard', 'vcards', 'id')
-            ->join('task', 'tasks', 'id')
-            ->join('client', 'clients', 'id')
-            ->join('organization', 'organizations', 'id')
-            ->order('vcard.name', 'ASC')
-            ->filter()
-            ->where('id', 9999, '<>')
-            ->where('isArchived', 1, '<>')
-            ->filter()
-            ->where('id', $id)
-            ->limit(1);
-
-        // Retrieve the Results
-        $result = $Query->result();
-
-        // Decode JSON Fields
-        foreach($result as $key => $record){
-
-            // Decode JSON Fields
-            $result[$key]['task']['process'] = json_decode($record['task']['process'] ?? '[]', true);
-            $result[$key]['vcard']['tags'] = json_decode($record['vcard']['tags'] ?? '[]', true);
-            $result[$key]['vcard']['industries'] = json_decode($record['vcard']['industries'] ?? '[]', true);
-
-            // Retrieve the vcard's avatar
-            if($record['vcard']['avatar']){
-                $Query = $this->Database->query()
-                    ->table('files')
-                    ->select('*')
-                    ->where('id', $record['vcard']['avatar'])
-                    ->limit(1);
-                $result[$key]['vcard']['avatar'] = $Query->fetch()[0] ?? $record['vcard']['avatar'];
-            }
-
-            // Retrieve the Events
-            $Query = $this->Database->query()
-                ->table('events')
-                ->select('*')
-                ->where('targetTable', 'inventory')
-                ->where('targetId', $record['id'])
-                ->index('id');
-            $result[$key]['events'] = $Query->result();
-            $Query = $this->Database->query()
-                ->table('events')
-                ->select('*')
-                ->where('targetTable', 'vcards')
-                ->where('targetId', $record['vcard']['id'])
-                ->index('id');
-            $result[$key]['events'] = array_merge($result[$key]['events'], $Query->result());
-
-            // Retrieve the Notes
-            $Query = $this->Database->query()
-                ->table('notes')
-                ->select('*')
-                ->join('owner', 'users', 'username')
-                ->where('targetTable', 'inventory')
-                ->where('targetId', $record['id'])
-                ->where('isArchived', 1, '<>')
-                ->index('id');
-            $result[$key]['notes'] = $Query->result();
-            $Query = $this->Database->query()
-                ->table('notes')
-                ->select('*')
-                ->join('owner', 'users', 'username')
-                ->where('targetTable', 'vcards')
-                ->where('targetId', $record['vcard']['id'])
-                ->where('isArchived', 1, '<>')
-                ->index('id');
-            foreach($Query->result() as $note){
-                $result[$key]['notes'][$note['id']] = $note;
-                $result[$key]['notes'][$note['id']]['sharedWith'] = json_decode($note['sharedWith'] ?? '[]', true);
-            }
-
-            // Retrieve the Contacts
-            $Query = $this->Database->query()
-                ->table('contacts')
-                ->select('*')
-                ->join('owner', 'users', 'username')
-                ->join('vcard', 'vcards', 'id')
-                ->filter()
-                ->where('organization', $record['organization']['id'])
-                ->where('targetTable', 'inventory')
-                ->where('targetId', $record['id'])
-                ->where('isArchived', 1, '<>')
-                ->filter('OR')
-                ->where('organization', $record['organization']['id'])
-                ->where('targetTable', 'clients')
-                ->where('targetId', $record['client']['id'])
-                ->where('isArchived', 1, '<>')
-                ->index('id');
-            $result[$key]['contacts'] = $Query->result();
-
-            // Retrieve the Files
-            $Query = $this->Database->query()
-                ->table('files')
-                ->select('*')
-                ->join('owner', 'users', 'username')
-                ->filter()
-                ->where('organization', $record['organization']['id'])
-                ->where('targetTable', 'inventory')
-                ->where('targetId', $record['id'])
-                ->where('isArchived', 1, '<>')
-                ->filter('OR')
-                ->where('organization', $record['organization']['id'])
-                ->where('targetTable', 'clients')
-                ->where('targetId', $record['client']['id'])
-                ->where('isArchived', 1, '<>')
-                ->index('id');
-            $result[$key]['files'] = $Query->result();
-
-            // Retrieve the Documents
-            $Query = $this->Database->query()
-                ->table('documents')
-                ->select('*')
-                ->join('owner', 'users', 'username')
-                ->join('doctype', 'doctypes', 'id')
-                ->join('organization', 'organizations', 'id')
-                ->join('letterhead', 'files', 'id')
-                ->filter()
-                ->where('isArchived', 1, '<>')
-                ->where('organization', $record['organization']['id'])
-                ->where('targetTable', 'inventory')
-                ->where('targetId', $record['id'])
-                ->filter('OR')
-                ->where('isArchived', 1, '<>')
-                ->where('organization', $record['organization']['id'])
-                ->where('targetTable', 'clients')
-                ->where('targetId', $record['client']['id'])
-                ->index('id');
-            $result[$key]['documents'] = $Query->result();
-
-            // Retrieve the Follow-ups
-            $result[$key]['followups'] = [];
-            $Query = $this->Database->query()
-                ->table('followups')
-                ->select('*')
-                ->join('owner', 'users', 'username')
-                ->join('assignedTo', 'users', 'id')
-                ->join('task', 'tasks', 'id')
-                ->join('vcard', 'vcards', 'id')
-                ->join('organization', 'organizations', 'id')
-                ->filter()
-                ->where('organization', $record['organization']['id'])
-                ->where('targetTable', 'inventory')
-                ->where('targetId', $record['id'])
-                ->where('isArchived', 1, '<>')
-                ->filter('OR')
-                ->where('organization', $record['organization']['id'])
-                ->where('targetTable', 'clients')
-                ->where('targetId', $record['client']['id'])
-                ->where('isArchived', 1, '<>')
-                ->index('id');
-            foreach($Query->result() as $followup){
-
-                // Decode JSON Fields
-                $followup['task']['process'] = json_decode($followup['task']['process'] ?? '[]', true);
-                $followup['vcard']['tags'] = json_decode($followup['vcard']['tags'] ?? '[]', true);
-                $followup['vcard']['industries'] = json_decode($followup['vcard']['industries'] ?? '[]', true);
-                $result[$key]['followups'][$followup['id']] = $followup;
-            }
-        }
-
-        // Return the Results
-        return $result[array_key_first($result)] ?? [];
-    }
-
-    /**
-     * Create a new lead and return the id
+     * Create a new record and return the id
      *
      * @param array $data
      * @return int
      */
     public function create(array $data): int
     {
+        // Set the Owner
+        if(array_key_exists('owner',$this->definition)){
+            $data['owner'] = $this->Auth->user()->username;
+        }
+
+        // Set the Owner
+        if(array_key_exists('organization',$this->definition)){
+            $data['organization'] = $this->Auth->user()->organization()->id;
+        }
+
+        // Sanitize the Data
+        foreach($data as $key => $value){
+
+            // Check if the key exists in the definition
+            if(!array_key_exists($key, $this->definition)){
+
+                // Remove the key from the data
+                unset($data[$key]);
+                continue;
+            }
+
+            // Check if the value is an array and encode it as JSON
+            if(is_array($value) && !array_key_exists('targetTable', $data) && !array_key_exists('targetId', $data)){
+                $data[$key] = json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            }
+        }
+
         // Create the Query
         $Query = $this->Database->query()
-            ->table('inventory')
+            ->table($this->table)
             ->insert($data);
 
         // Execute the Query
@@ -250,7 +93,72 @@ class InventoryModel extends Model {
     }
 
     /**
-     * Update a lead
+     * Retrieve a single record by ID
+     *
+     * @param int $id
+     * @return array
+     */
+    private function read(string $table, int $id): array
+    {
+        // Check if the definition is already cached
+        if(!array_key_exists($table, $this->definitions)){
+
+            // Create the Schema
+            $this->definitions[$table] = [];
+
+            // Describe the table
+            foreach($this->Database->schema()->define($table)->describe() as $column){
+                $this->definitions[$table][$column['Field']] = $column;
+            }
+        }
+
+        // Create the Query
+        $Query = $this->Database->query()
+            ->table($table)
+            ->select('*')
+            ->where('id', $id)
+            ->limit(1);
+
+        // Check if the table has a particular column and join if necessary
+        if(array_key_exists('organization', $this->definitions[$table])){
+            $Query->join('organization', 'organizations', 'id');
+        }
+        if(array_key_exists('lead', $this->definitions[$table])){
+            $Query->join('lead', 'leads', 'id');
+        }
+        if(array_key_exists('client', $this->definitions[$table])){
+            $Query->join('client', 'clients', 'id');
+        }
+        if(array_key_exists('vcard', $this->definitions[$table])){
+            $Query->join('vcard', 'vcards', 'id');
+        }
+        if(array_key_exists('task', $this->definitions[$table])){
+            $Query->join('task', 'tasks', 'id');
+        }
+
+        // Retrieve the Record
+        $record = $Query->fetch();
+
+        // Check if the Record exists
+        if($record){
+
+            // Set the record to the first element
+            $record= $record[array_key_first($record)];
+
+            // Check if a target is set
+            if(array_key_exists('targetTable', $record) && array_key_exists('targetId', $record)){
+
+                // Retrieve the Target
+                $record['target'] = $this->read($record['targetTable'], $record['targetId']);
+            }
+        }
+
+        // Return an empty array if not found
+        return $record;
+    }
+
+    /**
+     * Update a record
      *
      * @param int $id
      * @param array $data
@@ -258,13 +166,222 @@ class InventoryModel extends Model {
      */
     public function update(int $id, array $data): int
     {
+        // Sanitize the Data
+        foreach($data as $key => $value){
+
+            // Check if the key exists in the definition
+            if(!array_key_exists($key, $this->definition)){
+
+                // Remove the key from the data
+                unset($data[$key]);
+                continue;
+            }
+
+            // Skip the owner and organization fields
+            if(in_array($key, ['owner', 'organization'])){
+
+                // Remove the key from the data
+                unset($data[$key]);
+                continue;
+            }
+
+            // Check if the value is an array and encode it as JSON
+            if(is_array($value) && !array_key_exists('targetTable', $data) && !array_key_exists('targetId', $data)){
+                $data[$key] = json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            }
+        }
+
         // Create the Query
         $Query = $this->Database->query()
-            ->table('inventory')
+            ->table($this->table)
             ->update($data)
-            ->where('id', $id);
+            ->where($this->primary, $id);
 
         // Execute the Query
         return $Query->execute();
+    }
+
+    /**
+     * Delete a record
+     *
+     * @param int $id
+     * @return int
+     */
+    public function delete(int $id): int
+    {
+        // Create the Query
+        $Query = $this->Database->query()
+            ->table($this->table)
+            ->delete()
+            ->where($this->primary, $id);
+
+        // Execute the Query
+        return $Query->execute();
+    }
+
+    /**
+     * Retrieve the count of records
+     *
+     * @param array $conditions
+     * @return int
+     */
+    public function count(array $conditions = [], string $conjunction = 'AND'): int
+    {
+        // Create the Query
+        $Query = $this->Database->query()
+            ->table($this->table)
+            ->select($this->primary)
+            ->where('id', 9999, '<>')
+            ->where('organization', $this->Auth->user()->organization()->id);
+
+        // Add the Conditions
+        foreach($conditions as $condition){
+            $Query->where($condition["key"], $condition["value"], $condition["operator"], $conjunction);
+        }
+
+        // Execute the Query
+        $records = $Query->fetch();
+
+        // Return the Count
+        return count($records);
+    }
+
+    /**
+     * Retrieve multiple records
+     *
+     * @param array $conditions
+     * @return array
+     */
+    public function fetchAll(array $conditions = [], string $conjunction = 'AND'): array
+    {
+        // Create the Query
+        $Query = $this->Database->query()
+            ->table($this->table)
+            ->select('*')
+            ->join('owner', 'users', 'username')
+            ->join('product', 'products', 'id')
+            ->join('organization', 'organizations', 'id')
+            ->filter()
+            ->where('id', 9999, '<>')
+            ->where('isArchived', 1, '<>')
+            ->where('organization', $this->Auth->user()->organization()->id);
+
+        // Check if the conditions are empty
+        if(!empty($conditions)){
+
+            // Add a Filter
+            $Query->filter();
+
+            // Add the Conditions
+            foreach($conditions as $condition){
+                $Query->where($condition["key"], $condition["value"], $condition["operator"], $conjunction);
+            }
+        }
+
+        // Retrieve the Results
+        $records = $Query->fetch();
+
+        // Loop through the records to process them
+        foreach($records as $key => $record){
+
+            // Decode JSON Fields
+            $record['commissions'] = json_decode($record['commissions'] ?? '[]', true);
+
+            // Loop through the commissions to fetch the users
+            if(array_key_exists('commissions', $record) && is_array($record['commissions'])){
+                foreach($record['commissions'] as $index => $commission){
+                    if(array_key_exists('user', $commission)){
+                        $record['commissions'][$index]['user'] = $this->read('users', $commission['user']);
+                    }
+                }
+            }
+
+            // Retrieve the Target
+            if(array_key_exists('targetTable', $record)){
+                $record['target'] = $this->read($record['targetTable'], $record['targetId']);
+            }
+
+            // Overwrite the record with the processed one
+            $records[$key] = $record;
+        }
+
+        // Return the Results
+        return $records;
+    }
+
+    /**
+     * Retrieve a single record
+     *
+     * @param int $id
+     * @return array
+     */
+    public function fetch(int $id): array
+    {
+        // Create the Query
+        $Query = $this->Database->query()
+            ->table($this->table)
+            ->select('*')
+            ->join('owner', 'users', 'username')
+            ->join('product', 'products', 'id')
+            ->join('organization', 'organizations', 'id')
+            ->filter()
+            ->where('id', 9999, '<>')
+            ->filter()
+            ->where($this->primary, $id)
+            ->limit(1);
+
+        // Retrieve the record
+        $records = $Query->fetch();
+
+        // Loop through the records to process them
+        foreach($records as $key => $record){
+
+            // Decode JSON Fields
+            $record['commissions'] = json_decode($record['commissions'] ?? '[]', true);
+
+            // Loop through the commissions to fetch the users
+            if(array_key_exists('commissions', $record) && is_array($record['commissions'])){
+                foreach($record['commissions'] as $index => $commission){
+                    if(array_key_exists('user', $commission)){
+                        $record['commissions'][$index]['user'] = $this->read('users', $commission['user']);
+                    }
+                }
+            }
+
+            // Retrieve the Target
+            if(array_key_exists('targetTable', $record)){
+                $record['target'] = $this->read($record['targetTable'], $record['targetId']);
+            }
+
+            // Overwrite the record with the processed one
+            $records[$key] = $record;
+        }
+
+        // Return the record or an empty array if not found
+        return $records[array_key_first($records)] ?? [];
+    }
+
+    /**
+     * Archive a record
+     *
+     * @param int $id
+     * @return int
+     */
+    public function archive(int $id): int
+    {
+        // Execute the Query
+        return $this->update($id, ['isArchived' => 1]);
+    }
+
+    /**
+     * Restore a record
+     *
+     * @param int $id
+     * @return int
+     */
+    public function restore(int $id): int
+    {
+        // Execute the Query
+        return $this->update($id, ['isArchived' => 0]);
     }
 }
