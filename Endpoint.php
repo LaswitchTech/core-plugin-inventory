@@ -1,78 +1,304 @@
 <?php
 
-/**
- * Core Framework - InventoryEndpoint
- *
- * @license    MIT (https://mit-license.org/)
- * @author     Louis Ouellet <louis@laswitchtech.com>
- */
-
 // Import additionnal class into the global namespace
-use \LaswitchTech\Core\Abstracts\Endpoint;
+use \LaswitchTech\Core\Base\BaseEndpoint;
 
-class InventoryEndpoint extends Endpoint {
+class InventoryEndpoint extends BaseEndpoint {
 
     /**
      * Constructor
      */
     public function __construct()
     {
-
-        // Call Parent Constructor
+        // Call the parent constructor
         parent::__construct();
 
-        // Retrieve the namespace
-        $namespace = $this->Request->getNamespace();
+        // Initialize the Endpoint
+        $this->init('inventories');
 
-        // Set Global access
-        $this->Public = false;
-
-        // Set Level
-        switch($namespace){
-            case "/inventory/fetchAll":
-            case "/inventory/fetch":
-            case "/inventory/cap":
-                $this->Level = 1;
-                break;
-            case "/inventory/create":
-                $this->Level = 2;
-                break;
-            case "/inventory/update":
-                $this->Level = 3;
-                break;
-            case "/inventory/archive":
-            case "/inventory/recover":
-                $this->Level = 4;
-                break;
-        }
+        // Set Properties
+        $this->required = ['product','qty','price','rate','currency','commissions','targetTable','targetId'];
+        $this->optional = [];
     }
 
     /**
-     * Retrieve Inventory
+     * Retrieve a record
      */
-    public function fetchAllAction(): array
+    public function fetchAction(): array
     {
-        // Set the default message
-        $message = ["status" => 200, "message" => "OK", "data" => []];
+        // Call the parent constructor
+        $message = parent::fetchAction();
 
-        // Retrieve the conditions
-        $conditions = $this->Request->getParams('REQUEST','conditions') ?? [];
-
-        // Retrieve the conjunction
-        $conjunction = $this->Request->getParams('REQUEST','conjunction') ?? 'AND';
-
-        // Check if the inventory is accessible
+        // Check if the records is accessible
         if($message['status'] == 200){
 
-            // Check the request method
-            if($this->Request->getMethod() == "POST"){
+            // Check if the Relationship Plugin is accessible
+            if($this->Helper->Core->isInstalled('relationship')){
+                $message['data']['dependencies']['relationship'] = $this->Model->Relationship->get($this->basename, $message['data']['record']['id']);
+                if($this->Helper->Core->isInstalled('vcards') && array_key_exists('vcard', $message['data']['record'])){
+                    $message['data']['dependencies']['relationship'] = array_merge(
+                        $message['data']['dependencies']['relationship'],
+                        $this->Model->Relationship->get('vcards', $message['data']['record']['vcard']['id'])
+                    );
+                }
+            }
 
-                // Retrieve the inventory records
-                $message['data']['records'] = $this->Model->Inventory->fetchAll($conditions, $conjunction);
-            } else {
-                $message = ["status" => 405, "message" => "Method Not Allowed", "data" => "The method is not allowed for the requested URL."];
+            // Check if the Events is accessible
+            if($this->Helper->Core->isInstalled('event')){
+                $message['data']['dependencies']['event'] = $this->Model->Event->fetchAll([
+                    ["key" => "targetTable", "operator" => "=", "value" => $this->basename],
+                    ["key" => "targetId", "operator" => "=", "value" => $message['data']['record']['id']],
+                    ["key" => "isArchived", "operator" => "<>", "value" => 1],
+                ]);
+            }
+
+            // Check if the Notes is accessible
+            if($this->Helper->Core->isInstalled('notes')){
+                $message['data']['dependencies']['notes'] = $this->Model->Notes->fetchAll([
+                    ["key" => "targetTable", "operator" => "=", "value" => $this->basename],
+                    ["key" => "targetId", "operator" => "=", "value" => $message['data']['record']['id']],
+                    ["key" => "isArchived", "operator" => "<>", "value" => 1],
+                ]);
             }
         }
+
+        // Return the message
+        return $message;
+    }
+
+    /**
+     * Create a record
+     */
+    public function createAction(): array
+    {
+        // Call the parent constructor
+        $message = parent::createAction();
+
+        // Check if the record is accessible
+        if($message['status'] == 200){
+
+            // Retrieve the parameters
+            $parameters = $message['data']['parameters'];
+
+            // Initialize the fields array
+            $fields = [];
+
+            // Check if the Event Plugin is accessible
+            if($this->Helper->Core->isInstalled('event')){
+
+                // Initialize the Events
+                $message['data']['event'] = [];
+
+                // Setup a new event
+                $event = [
+                    'category' => 'Inventory',
+                    'message' => 'New Inventory Created by <vcard>'.$this->Auth->user()->vcard['id'].':'.$this->Auth->user()->username.'</vcard>',
+                    'icon' => 'circle',
+                    'color' => 'secondary',
+                    'link' => '/plugin/inventories/details?id='.$message['data']['record']['id'],
+                    'targetTable' => 'inventories',
+                    'targetId' => $message['data']['record']['id'],
+                ];
+
+                // Create the event
+                $message['data']['event'][] = $this->Model->Event->create($event);
+
+                // Setup a new event for the target
+                $event['link'] = '/plugin/'.$message['data']['record']['targetTable'].'/details?id='.$message['data']['record']['targetId'];
+                $event['targetTable'] = $message['data']['record']['targetTable'];
+                $event['targetId'] = $message['data']['record']['targetId'];
+
+                // Create the event
+                $message['data']['event'][] = $this->Model->Event->create($event);
+            }
+
+            // Check if $fields is empty
+            if(!empty($fields)){
+                $affectedRows = $this->Model->{$this->name}->update($message['data']['record']['id'], $fields);
+            }
+        }
+
+        // Return the message
+        return $message;
+    }
+
+    /**
+     * Update a record
+     */
+    public function updateAction(): array
+    {
+        // Call the parent constructor
+        $message = parent::updateAction();
+
+        // Check if the record is accessible
+        if($message['status'] == 200){
+
+            // Check if the Event Plugin is accessible
+            if($this->Helper->Core->isInstalled('event')){
+
+                // Initialize the Events
+                $message['data']['event'] = [];
+
+                // Setup a new event
+                $event = [
+                    'category' => 'Inventory',
+                    'message' => 'Inventory Updated for by <vcard>'.$this->Auth->user()->vcard['id'].':'.$this->Auth->user()->username.'</vcard>',
+                    'icon' => 'circle',
+                    'color' => 'secondary',
+                    'link' => '/plugin/inventories/details?id='.$message['data']['record']['id'].'&name='.urlencode($message['data']['record']['vcard']['name']),
+                    'targetTable' => 'inventories',
+                    'targetId' => $message['data']['record']['id'],
+                ];
+
+                // Create the event
+                $message['data']['event'][] = $this->Model->Event->create($event);
+
+                // Setup a new event for the target
+                $event['link'] = '/plugin/'.$message['data']['record']['targetTable'].'/details?id='.$message['data']['record']['targetId'];
+                $event['targetTable'] = $message['data']['record']['targetTable'];
+                $event['targetId'] = $message['data']['record']['targetId'];
+
+                // Create the event
+                $message['data']['event'][] = $this->Model->Event->create($event);
+            }
+        }
+
+        // Return the message
+        return $message;
+    }
+
+    /**
+     * Delete a record
+     */
+    public function deleteAction(): array
+    {
+        // Call the parent constructor
+        $message = parent::deleteAction();
+
+        // Check if the record is accessible
+        if($message['status'] == 200){
+
+            // Check if the Event Plugin is accessible
+            if($this->Helper->Core->isInstalled('event')){
+
+                // Initialize the Events
+                $message['data']['event'] = [];
+
+                // Setup a new event
+                $event = [
+                    'category' => 'Inventory',
+                    'message' => 'Inventory Deleted by <vcard>'.$this->Auth->user()->vcard['id'].':'.$this->Auth->user()->username.'</vcard>',
+                    'icon' => 'circle',
+                    'color' => 'secondary',
+                    'link' => '/plugin/inventories/details?id='.$message['data']['record']['id'].'&name='.urlencode($message['data']['record']['vcard']['name']),
+                    'targetTable' => 'inventories',
+                    'targetId' => $message['data']['record']['id'],
+                ];
+
+                // Create the event
+                $message['data']['event'][] = $this->Model->Event->create($event);
+
+                // Setup a new event for the target
+                $event['link'] = '/plugin/'.$message['data']['record']['targetTable'].'/details?id='.$message['data']['record']['targetId'];
+                $event['targetTable'] = $message['data']['record']['targetTable'];
+                $event['targetId'] = $message['data']['record']['targetId'];
+
+                // Create the event
+                $message['data']['event'][] = $this->Model->Event->create($event);
+            }
+        }
+
+        // Return the message
+        return $message;
+    }
+
+    /**
+     * Archive a record
+     */
+    public function archiveAction(): array
+    {
+        // Call the parent constructor
+        $message = parent::archiveAction();
+
+        // Check if the record is accessible
+        if($message['status'] == 200){
+
+            // Check if the Event Plugin is accessible
+            if($this->Helper->Core->isInstalled('event')){
+
+                // Initialize the Events
+                $message['data']['event'] = [];
+
+                // Setup a new event
+                $event = [
+                    'category' => 'Inventory',
+                    'message' => 'Inventory Archived by <vcard>'.$this->Auth->user()->vcard['id'].':'.$this->Auth->user()->username.'</vcard>',
+                    'icon' => 'circle',
+                    'color' => 'secondary',
+                    'link' => '/plugin/inventories/details?id='.$message['data']['record']['id'],
+                    'targetTable' => 'inventories',
+                    'targetId' => $message['data']['record']['id'],
+                ];
+
+                // Create the event
+                $message['data']['event'][] = $this->Model->Event->create($event);
+
+                // Setup a new event for the target
+                $event['link'] = '/plugin/'.$message['data']['record']['targetTable'].'/details?id='.$message['data']['record']['targetId'];
+                $event['targetTable'] = $message['data']['record']['targetTable'];
+                $event['targetId'] = $message['data']['record']['targetId'];
+
+                // Create the event
+                $message['data']['event'][] = $this->Model->Event->create($event);
+            }
+        }
+
+        // Return the message
+        return $message;
+    }
+
+    /**
+     * Recover a record
+     */
+    public function recoverAction(): array
+    {
+        // Call the parent constructor
+        $message = parent::recoverAction();
+
+        // Check if the record is accessible
+        if($message['status'] == 200){
+
+            // Check if the Event Plugin is accessible
+            if($this->Helper->Core->isInstalled('event')){
+
+                // Initialize the Events
+                $message['data']['event'] = [];
+
+                // Setup a new event
+                $event = [
+                    'category' => 'Inventory',
+                    'message' => 'Inventory Recovered by <vcard>'.$this->Auth->user()->vcard['id'].':'.$this->Auth->user()->username.'</vcard>',
+                    'icon' => 'circle',
+                    'color' => 'secondary',
+                    'link' => '/plugin/inventories/details?id='.$message['data']['record']['id'],
+                    'targetTable' => 'inventories',
+                    'targetId' => $message['data']['record']['id'],
+                ];
+
+                // Create the event
+                $message['data']['event'][] = $this->Model->Event->create($event);
+
+                // Setup a new event for the target
+                $event['link'] = '/plugin/'.$message['data']['record']['targetTable'].'/details?id='.$message['data']['record']['targetId'];
+                $event['targetTable'] = $message['data']['record']['targetTable'];
+                $event['targetId'] = $message['data']['record']['targetId'];
+
+                // Create the event
+                $message['data']['event'][] = $this->Model->Event->create($event);
+            }
+        }
+
+        // Return the message
         return $message;
     }
 
@@ -82,221 +308,5 @@ class InventoryEndpoint extends Endpoint {
     public function capAction(): array
     {
         return ["status" => 200, "message" => "OK", "data" => (($this->Config->get('application','caps') ?? [])['commissions'] ?? 0)];
-    }
-
-    /**
-     * Retrieve an item in the inventory
-     */
-    public function fetchAction(): array
-    {
-        // Set the default message
-        $message = ["status" => 200, "message" => "OK", "data" => []];
-
-        // Check if the inventory is accessible
-        if($message['status'] == 200){
-
-            // Check the request method
-            if($this->Request->getMethod() == "GET"){
-
-                // Retrieve the id
-                $id = intval($this->Request->getParams('GET','id'));
-
-                // Retrieve the inventory item
-                if($item = $this->Model->Inventory->fetch($id)){
-                    $message['data']['record'] = $item;
-                } else {
-                    $message = ["status" => 404, "message" => "Not Found", "data" => "The inventory item does not exist."];
-                }
-            } else {
-                $message = ["status" => 405, "message" => "Method Not Allowed", "data" => "The method is not allowed for the requested URL."];
-            }
-        }
-        return $message;
-    }
-
-    /**
-     * Create an item in the inventory
-     */
-    public function createAction(): array
-    {
-        // Set the default message
-        $message = ["status" => 200, "message" => "OK", "data" => []];
-
-        // Check if the inventory is accessible
-        if($message['status'] == 200){
-
-            // Check the request method
-            if($this->Request->getMethod() == "POST"){
-
-                // Retrieve the parameters
-                $parameters = $this->Request->getParams('REQUEST');
-
-                // Set Required Fields
-                $required = ['product','qty','price','rate','currency','commissions','targetTable','targetId'];
-
-                // Check if all required fields are set
-                if(count(array_intersect_key(array_flip($required), $parameters)) == count($required)){
-
-                    // Check if the product exists
-                    if($product = $this->Model->Products->fetch($parameters['product'])) {
-
-                        // Create the inventory item
-                        $item = $this->Model->Inventory->create($parameters);
-
-                        // Check if the item was created
-                        if($item){
-                            $message['data']['record'] = $this->Model->Inventory->fetch($item);
-                        } else {
-                            $message = ["status" => 500, "message" => "Internal Server Error", "data" => "An error occurred while creating the inventory item."];
-                        }
-                    } else {
-                        $message = ["status" => 404, "message" => "Not Found", "data" => "The product does not exist."];
-                    }
-                } else {
-                    $missing = [];
-                    foreach($required as $field){
-                        if(!array_key_exists($field,$parameters)){
-                            $missing[] = $field;
-                        }
-                    }
-                    $message = ["status" => 400, "message" => "Bad Request", "data" => "Required fields [".implode(',',$missing)."] are missing."];
-                }
-            } else {
-                $message = ["status" => 405, "message" => "Method Not Allowed", "data" => "The method is not allowed for the requested URL."];
-            }
-        }
-        return $message;
-    }
-
-    /**
-     * Update an item in the inventory
-     */
-    public function updateAction(): array
-    {
-        // Set the default message
-        $message = ["status" => 200, "message" => "OK", "data" => []];
-
-        // Check if the inventory is accessible
-        if($message['status'] == 200){
-
-            // Check the request method
-            if($this->Request->getMethod() == "POST"){
-
-                // Retrieve the parameters
-                $parameters = $this->Request->getParams('REQUEST');
-
-                // Set Required Fields
-                $required = ['id'];
-
-                // Check if all required fields are set
-                if(count(array_intersect_key(array_flip($required), $parameters)) == count($required)){
-
-                    // Check if the product exists
-                    if($product = $this->Model->Products->fetch($parameters['product'])) {
-
-                        // Create the inventory item
-                        $item = $this->Model->Inventory->update($parameters['id'],$parameters);
-
-                        // Check if the item was created
-                        if($item){
-                            $message['data']['record'] = $this->Model->Inventory->fetch($parameters['id']);
-                        } else {
-                            $message = ["status" => 500, "message" => "Internal Server Error", "data" => "An error occurred while creating the inventory item."];
-                        }
-                    } else {
-                        $message = ["status" => 404, "message" => "Not Found", "data" => "The product does not exist."];
-                    }
-                } else {
-                    $missing = [];
-                    foreach($required as $field){
-                        if(!array_key_exists($field,$parameters)){
-                            $missing[] = $field;
-                        }
-                    }
-                    $message = ["status" => 400, "message" => "Bad Request", "data" => "Required fields [".implode(',',$missing)."] are missing."];
-                }
-            } else {
-                $message = ["status" => 405, "message" => "Method Not Allowed", "data" => "The method is not allowed for the requested URL."];
-            }
-        }
-        return $message;
-    }
-
-    /**
-     * Archive an item in the inventory
-     */
-    public function archiveAction(): array
-    {
-        // Set the default message
-        $message = ["status" => 200, "message" => "OK", "data" => []];
-
-        // Retrieve the Item
-        $item = $this->Model->Inventory->fetch(intval($this->Request->getParams('GET','id')));
-
-        // Check if the Item is accessible
-        if(empty($item)){
-            $message = ["status" => 404, "message" => "Not Found", "data" => "Could not find the requested item."];
-        } else {
-            if($item['organization']['id'] != $this->Auth->user()->organization()->id){
-                $message = ["status" => 403, "message" => "Forbidden", "data" => "You are not allowed to access this item."];
-            }
-        }
-
-        // Check if the Note is accessible
-        if($message['status'] == 200){
-
-            // Check the request method
-            if($this->Request->getMethod() == "GET"){
-
-                // Update the Item
-                $this->Model->Inventory->update($item['id'], ["isArchived" => 1]);
-
-                // Retrieve the Updated Item
-                $message["data"]["record"] = $this->Model->Inventory->fetch($item['id']);
-            } else {
-                $message = ["status" => 400, "message" => "Bad Request", "data" => "Invalid Request Method"];
-            }
-        }
-
-        return $message;
-    }
-
-    /**
-     * Recover an item in the inventory
-     */
-    public function recoverAction(): array
-    {
-        // Set the default message
-        $message = ["status" => 200, "message" => "OK", "data" => []];
-
-        // Retrieve the Item
-        $item = $this->Model->Inventory->fetch(intval($this->Request->getParams('GET','id')));
-
-        // Check if the Item is accessible
-        if(empty($item)){
-            $message = ["status" => 404, "message" => "Not Found", "data" => "Could not find the requested item."];
-        } else {
-            if($item['organization']['id'] != $this->Auth->user()->organization()->id){
-                $message = ["status" => 403, "message" => "Forbidden", "data" => "You are not allowed to access this item."];
-            }
-        }
-
-        // Check if the Note is accessible
-        if($message['status'] == 200){
-
-            // Check the request method
-            if($this->Request->getMethod() == "GET"){
-
-                // Update the Item
-                $affectedRows = $this->Model->Inventory->update($item['id'], ["isArchived" => 0]);
-
-                // Retrieve the Updated Item
-                $message["data"]["record"] = $this->Model->Inventory->fetch($item['id']);
-            } else {
-                $message = ["status" => 400, "message" => "Bad Request", "data" => "Invalid Request Method"];
-            }
-        }
-
-        return $message;
     }
 }

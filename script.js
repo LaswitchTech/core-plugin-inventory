@@ -1,10 +1,3 @@
-//
-//   Core Framework - Script file
-//
-//   @license    MIT (https://mit-license.org/)
-//   @author     Louis Ouellet <louis@laswitchtech.com>
-//
-
 const InventoryFormat = function(element, commission, list){
 
     // Find the list component
@@ -49,7 +42,7 @@ const InventoryModal = function(id, callback = null){
 
     // AJAX Request
     $.ajax({
-        url: '/endpoint.php/inventory/cap',
+        url: '/api/inventory/cap',
         headers: {'X-CSRF-Authorization': CSRF_KEY},
         type: 'GET',dataType: 'json',
         success: function(commissionCap) {
@@ -57,7 +50,7 @@ const InventoryModal = function(id, callback = null){
 
             // AJAX Request
             $.ajax({
-                url: '/endpoint.php/inventory/fetch?id=' + id,
+                url: '/api/inventory/fetch?id=' + id,
                 headers: {'X-CSRF-Authorization': CSRF_KEY},
                 type: 'GET',dataType: 'json',
                 success: function(response) {
@@ -175,7 +168,7 @@ const InventoryModal = function(id, callback = null){
 
                                                 // AJAX Request
                                                 $.ajax({
-                                                    url: '/endpoint.php/inventory/update?id=' + id,
+                                                    url: '/api/inventory/update?id=' + id,
                                                     headers: {'X-CSRF-Authorization': CSRF_KEY},
                                                     type: 'POST',dataType: 'json',
                                                     data: currentValues,
@@ -335,7 +328,7 @@ const InventoryModal = function(id, callback = null){
 
                                                         // AJAX Request
                                                         $.ajax({
-                                                            url: '/endpoint.php/auth/colleagues',
+                                                            url: '/api/auth/colleagues',
                                                             type: 'GET',dataType: 'json',
                                                             success: function(members) {
                                                                 var options = [];
@@ -453,7 +446,7 @@ const InventoryModalArchive = function(id, callback = null){
 
     // AJAX Request
     $.ajax({
-        url: '/endpoint.php/inventory/fetch?id=' + id,
+        url: '/api/inventory/fetch?id=' + id,
         headers: {'X-CSRF-Authorization': CSRF_KEY},
         type: 'GET',dataType: 'json',
         success: function(response) {
@@ -501,7 +494,7 @@ const InventoryModalArchive = function(id, callback = null){
 
                                 // AJAX Request
                                 $.ajax({
-                                    url: '/endpoint.php/inventory/archive?id='+id,
+                                    url: '/api/inventory/archive?id='+id,
                                     type: 'GET',dataType: 'json',
                                     success: function(response) {
 
@@ -755,7 +748,7 @@ function process_function_InventoryAddProduct(task, value, callback = null){
 
             // AJAX Request
             $.ajax({
-                url: '/endpoint.php/inventory/create',
+                url: '/api/inventory/create',
                 headers: {'X-CSRF-Authorization': CSRF_KEY},
                 type: 'POST',dataType: 'json',
                 data: item,
