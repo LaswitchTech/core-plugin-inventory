@@ -1,0 +1,15 @@
+[
+    {
+        "id": 9999,
+        "created": "2025-04-15 13:26:25",
+        "modified": "2025-06-25 13:42:14",
+        "owner": "demo",
+        "product": null,
+        "serialNumber": null,
+        "organization": null,
+        "isActive": 0,
+        "isArchived": 1,
+        "targetTable": null,
+        "targetId": null
+    }
+]
