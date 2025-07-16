@@ -1,0 +1,93 @@
+{
+    "0": {
+        "Field": "id",
+        "Type": "bigint(20)",
+        "Null": "NO",
+        "Key": "PRI",
+        "Default": null,
+        "Extra": "auto_increment"
+    },
+    "1": {
+        "Field": "created",
+        "Type": "datetime",
+        "Null": "NO",
+        "Key": "",
+        "Default": "CURRENT_TIMESTAMP",
+        "Extra": ""
+    },
+    "2": {
+        "Field": "modified",
+        "Type": "datetime",
+        "Null": "NO",
+        "Key": "",
+        "Default": "CURRENT_TIMESTAMP",
+        "Extra": "on update CURRENT_TIMESTAMP"
+    },
+    "3": {
+        "Field": "owner",
+        "Type": "varchar(255)",
+        "Null": "YES",
+        "Key": "",
+        "Default": null,
+        "Extra": ""
+    },
+    "4": {
+        "Field": "product",
+        "Type": "bigint(20)",
+        "Null": "YES",
+        "Key": "",
+        "Default": null,
+        "Extra": ""
+    },
+    "5": {
+        "Field": "serialNumber",
+        "Type": "varchar(255)",
+        "Null": "YES",
+        "Key": "",
+        "Default": null,
+        "Extra": ""
+    },
+    "6": {
+        "Field": "organization",
+        "Type": "bigint(20)",
+        "Null": "YES",
+        "Key": "",
+        "Default": null,
+        "Extra": ""
+    },
+    "7": {
+        "Field": "isActive",
+        "Type": "int(1)",
+        "Null": "YES",
+        "Key": "",
+        "Default": "1",
+        "Extra": ""
+    },
+    "8": {
+        "Field": "isArchived",
+        "Type": "int(1)",
+        "Null": "YES",
+        "Key": "",
+        "Default": "0",
+        "Extra": ""
+    },
+    "9": {
+        "Field": "targetTable",
+        "Type": "varchar(255)",
+        "Null": "YES",
+        "Key": "",
+        "Default": null,
+        "Extra": ""
+    },
+    "10": {
+        "Field": "targetId",
+        "Type": "bigint(20)",
+        "Null": "YES",
+        "Key": "",
+        "Default": null,
+        "Extra": ""
+    },
+    "engine": "InnoDB",
+    "charset": "utf8",
+    "collation": "general_ci"
+}
